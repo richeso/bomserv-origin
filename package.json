@@ -1,12 +1,12 @@
 {
-  "name": "hackathon-starter",
-  "version": "4.3.0",
-  "description": "A boilerplate for Node.js web applications",
+  "name": "bomserv-origin",
+  "version": "1.0.0",
+  "description": "bomserv Fork from Sahat Yalkabov:https://github.com/sahat/hackathon-starter.git",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sahat/hackathon-starter.git"
+    "url": "https://github.com/richeso/bomserv-origin.git"
   },
-  "author": "Sahat Yalkabov",
+  "author": "Richard Che-So",
   "license": "MIT",
   "scripts": {
     "start": "node app.js",
@@ -15,6 +15,7 @@
     "eslint": "eslint **/*.js"
   },
   "dependencies": {
+    "async": "^2.1.2",
     "bcrypt-nodejs": "^0.0.3",
     "bluebird": "^3.4.7",
     "body-parser": "^1.15.2",
@@ -44,7 +45,8 @@
     "node-foursquare": "^0.3.0",
     "node-linkedin": "^0.5.4",
     "node-sass-middleware": "^0.11.0",
-    "nodemailer": "^3.1.7",
+    "nodemailer": "^4.0.1",
+    "nodemailer-sendgrid-transport": "^0.2.0",
     "passport": "0.3.2",
     "passport-facebook": "^2.1.1",
     "passport-github": "^1.1.0",

@@ -1,4 +1,5 @@
 const bluebird = require('bluebird');
+const async = require('async');
 const crypto = bluebird.promisifyAll(require('crypto'));
 const nodemailer = require('nodemailer');
 const passport = require('passport');
@@ -370,13 +371,15 @@ exports.postReset = (req, res, next) => {
   
   const sendResetPasswordEmail = (user) => {
     if (!user) { return; }
-    const transporter = nodemailer.createTransport({
-      service: 'SendGrid',
-      auth: {
-        user: process.env.SENDGRID_USER,
-        pass: process.env.SENDGRID_PASSWORD
-      }
-    });
+    const sgTransport = require('nodemailer-sendgrid-transport');
+    var sgOptions = {
+    		  auth: {
+    		    api_key:  process.env.SENDGRID_PASSWORD
+    	}
+    }
+
+    const transporter = nodemailer.createTransport(sgTransport(sgOptions));
+    
     const mailOptions = {
       to: user.email,
       from: 'smq-site@bomsy.com',
@@ -445,17 +448,18 @@ exports.postForgot = (req, res, next) => {
   const sendForgotPasswordEmail = (user) => {
     if (!user) { return; }
     const token = user.passwordResetToken;
-    const transporter = nodemailer.createTransport({
-      service: 'SendGrid',
-      auth: {
-        user: process.env.SENDGRID_USER,
-        pass: process.env.SENDGRID_PASSWORD
-      }
-    });
+    const sgTransport = require('nodemailer-sendgrid-transport');
+    var sgOptions = {
+    		  auth: {
+    		    api_key:  process.env.SENDGRID_PASSWORD
+    	}
+    }
 
+    const transporter = nodemailer.createTransport(sgTransport(sgOptions));
+    
     const mailOptions = {
         to: user.email,
-        from: 'hackathon@starter.com',
+        from: 'smq-site@bomsy.com',
         subject: 'Reset your password on BOMSY',
         text: `You are receiving this email because you (or someone else) have requested the reset of the password for your account.\n\n
           Please click on the following link, or paste this into your browser to complete the process:\n\n
@@ -497,7 +501,7 @@ exports.getActmail = (req, res) => {
 
 exports.postActmail = (req, res, next) => {
   req.assert('email', 'Please enter a valid email address.').isEmail();
-  req.sanitize('email').normalizeEmail({ remove_dots: false });
+  req.sanitize('email').normalizeEmail({ gmail_remove_dots: false });
 
   const errors = req.validationErrors();
 
@@ -514,6 +518,7 @@ exports.postActmail = (req, res, next) => {
         });
       },
       function setRandomToken(token, done) {
+    	  //console.log("Resending activation Email for: " + req.body.email);
           User.findOne({ email: req.body.email }, (err, user) => {
             if (err) { return done(err); }
             if (!user) {
