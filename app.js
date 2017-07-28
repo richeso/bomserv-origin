@@ -19,8 +19,18 @@ const expressValidator = require('express-validator');
 const expressStatusMonitor = require('express-status-monitor');
 const sass = require('node-sass-middleware');
 const multer = require('multer');
-
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
+const crypto = require("crypto");
+const cookieParser = require('cookie-parser');
+const i18n = require('i18n');
+i18n.configure({
+	locales:['en', 'fr'],
+	directory: __dirname + '/locales',
+	defaultLocale: 'en',
+	extension: '.json',
+	// define a custom cookie name to parse locale settings from 
+	cookie: 'i18n'
+});
 
 /**
  * Load environment variables from .env file, where API keys and passwords are configured.
@@ -34,6 +44,7 @@ const homeController = require('./controllers/home');
 const userController = require('./controllers/user');
 const apiController = require('./controllers/api');
 const contactController = require('./controllers/contact');
+const lobbyController = require('./controllers/lobby');
 
 /**
  * API keys and Passport configuration.
@@ -44,6 +55,7 @@ const passportConfig = require('./config/passport');
  * Create Express server.
  */
 const app = express();
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: 31557600000 }));
 
 /**
  * Connect to MongoDB.
@@ -75,21 +87,31 @@ app.use(session({
   resave: true,
   saveUninitialized: true,
   secret: process.env.SESSION_SECRET,
+  cookie : {
+	    maxAge: 6*60*60*1000 // 6 Hours - 6*60*60*1000
+	  },
   store: new MongoStore({
     url: process.env.MONGODB_URI || process.env.MONGOLAB_URI,
-    autoReconnect: true
+    autoReconnect: true,
+    autoRemove: 'interval',
+    autoRemoveInterval: 10*60*1000 // 10 Minutes 
   })
 }));
+//init i18n after cookie-parser
+app.use(cookieParser(process.env.SESSION_SECRET));
+app.use(i18n.init);
+
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash());
 app.use((req, res, next) => {
-  if (req.path === '/api/upload') {
+  if (req.path === '/api/upload' || req.path.indexOf('/lobby') != -1 ) {
     next();
   } else {
     lusca.csrf()(req, res, next);
   }
 });
+
 app.use(lusca.xframe('SAMEORIGIN'));
 app.use(lusca.xssProtection(true));
 app.use((req, res, next) => {
@@ -110,7 +132,7 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: 31557600000 }));
+//app.use(express.static(path.join(__dirname, 'public'), { maxAge: 31557600000 }));
 
 /**
  * Primary app routes.
@@ -121,6 +143,11 @@ app.post('/login', userController.postLogin);
 app.get('/logout', userController.logout);
 app.get('/forgot', userController.getForgot);
 app.post('/forgot', userController.postForgot);
+
+app.get('/actmail', userController.getActmail);
+app.post('/actmail', userController.postActmail);
+app.get('/activate/:token', userController.getActivate);
+
 app.get('/reset/:token', userController.getReset);
 app.post('/reset/:token', userController.postReset);
 app.get('/signup', userController.getSignup);
@@ -132,6 +159,19 @@ app.post('/account/profile', passportConfig.isAuthenticated, userController.post
 app.post('/account/password', passportConfig.isAuthenticated, userController.postUpdatePassword);
 app.post('/account/delete', passportConfig.isAuthenticated, userController.postDeleteAccount);
 app.get('/account/unlink/:provider', passportConfig.isAuthenticated, userController.getOauthUnlink);
+
+/*
+ * Lobby API
+ */
+
+app.get('/lobby/testauth',  passport.authenticate('basic', { session: false }), lobbyController.testBasicAuth);
+app.get('/lobby',  passport.authenticate('basic', { session: false }), lobbyController.findAll);
+app.get('/lobby/id/:id/:secret',  passport.authenticate('basic', { session: false }), lobbyController.findById);
+app.post('/lobby/add',  passport.authenticate('basic', { session: false }), lobbyController.addLobby);
+app.put('/lobby/update/id/:id/:secret',  passport.authenticate('basic', { session: false }), lobbyController.updateLobby);
+app.delete('/lobby/delete/id/:id/:secret',  passport.authenticate('basic', { session: false }), lobbyController.delete);
+app.post('/lobby/join/id/:id/:secret',  passport.authenticate('basic', { session: false }), lobbyController.join);
+app.delete('/lobby/leave/id/:id/:secret',  passport.authenticate('basic', { session: false }), lobbyController.leave);
 
 /**
  * API examples routes.
@@ -166,6 +206,7 @@ app.get('/api/pinterest', passportConfig.isAuthenticated, passportConfig.isAutho
 app.post('/api/pinterest', passportConfig.isAuthenticated, passportConfig.isAuthorized, apiController.postPinterest);
 app.get('/api/google-maps', apiController.getGoogleMaps);
 
+
 /**
  * OAuth authentication routes. (Sign in)
  */
@@ -173,7 +214,21 @@ app.get('/auth/instagram', passport.authenticate('instagram'));
 app.get('/auth/instagram/callback', passport.authenticate('instagram', { failureRedirect: '/login' }), (req, res) => {
   res.redirect(req.session.returnTo || '/');
 });
-app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email', 'user_location'] }));
+//app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email', 'user_location'] }));
+app.get("/auth/facebook", function(req, res)
+		{
+	        var apiToken = req.param('state');
+	        if (apiToken) {
+	        	req.session.apiToken = apiToken;
+	        } else {
+	        	req.session.apiToken = null;
+	        }
+		    passport.authenticate("facebook",
+		    {
+		        scope: 'public_profile email user_location' ,
+		        state: apiToken
+		    })(req, res);
+		});
 app.get('/auth/facebook/callback', passport.authenticate('facebook', { failureRedirect: '/login' }), (req, res) => {
   res.redirect(req.session.returnTo || '/');
 });
@@ -181,7 +236,25 @@ app.get('/auth/github', passport.authenticate('github'));
 app.get('/auth/github/callback', passport.authenticate('github', { failureRedirect: '/login' }), (req, res) => {
   res.redirect(req.session.returnTo || '/');
 });
-app.get('/auth/google', passport.authenticate('google', { scope: 'profile email' }));
+/*
+ * This format is for access to google drive
+ * app.get('/auth/google', passport.authenticate('google', { scope: 'profile email https://www.googleapis.com/auth/drive', accessType: 'offline', prompt: 'consent'}));
+ */
+//app.get('/auth/google', passport.authenticate('google', { scope: 'profile email'}));
+app.get("/auth/google", function(req, res)
+		{
+	        var apiToken = req.param('state');
+	        if (apiToken) {
+	        	req.session.apiToken = apiToken;
+	        } else {
+	        	req.session.apiToken = null;
+	        }
+		    passport.authenticate("google",
+		    {
+		        scope: 'profile email' ,
+		        state: apiToken
+		    })(req, res);
+		});
 app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login' }), (req, res) => {
   res.redirect(req.session.returnTo || '/');
 });
@@ -205,14 +278,34 @@ app.get('/auth/tumblr', passport.authorize('tumblr'));
 app.get('/auth/tumblr/callback', passport.authorize('tumblr', { failureRedirect: '/api' }), (req, res) => {
   res.redirect('/api/tumblr');
 });
-app.get('/auth/steam', passport.authorize('openid', { state: 'SOME STATE' }));
-app.get('/auth/steam/callback', passport.authorize('openid', { failureRedirect: '/login' }), (req, res) => {
+//app.get('/auth/steam', passport.authorize('openid', { state: 'SOME STATE' }));
+app.get("/auth/steam", function(req, res)
+		{
+			var apiToken = req.param('state');
+		    if (apiToken) {
+		    	req.session.apiToken = apiToken;
+		    } else {
+		    	req.session.apiToken = null;
+		    }
+		    passport.authenticate("openid",
+		    {
+		        state: apiToken	        
+		    })(req, res);
+		});
+
+app.get('/auth/steam/callback', passport.authenticate('openid', { failureRedirect: '/login' }), (req, res) => {
   res.redirect(req.session.returnTo || '/');
 });
 app.get('/auth/pinterest', passport.authorize('pinterest', { scope: 'read_public write_public' }));
 app.get('/auth/pinterest/callback', passport.authorize('pinterest', { failureRedirect: '/login' }), (req, res) => {
   res.redirect('/api/pinterest');
 });
+
+app.get('/lang/:langcd', function (req, res) {
+    res.cookie('i18n', req.params.langcd);
+    res.redirect('/')
+});
+
 
 /**
  * Error Handler.

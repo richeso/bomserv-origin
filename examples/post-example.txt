@@ -1,0 +1,136 @@
+using System.Collections;
+ using System.Collections.Generic;
+ using UnityEngine;
+ using System.Net.Sockets;
+ using System.IO;
+ using UnityEngine.Networking;
+ using System.Net.Security;
+ using System.Security.Cryptography.X509Certificates;
+ using System.Security.Authentication;
+ 
+ public class TCPPostSSLTest:MonoBehaviour
+ {
+     SampleAuthentificationRequest request = null;
+ 
+     void Start () {
+         string host = "example.com";
+         string authorizationQuery = "/foo/login.html";
+         request = new SampleAuthentificationRequest (host, authorizationQuery);
+         StartCoroutine(request.Launch ("<login>", "<password>"));
+     }
+ 
+     // Update is called once per frame
+     void Update () {
+         if (!this.request.connected) {
+             if (this.request.redirection != null) {
+                 Debug.Log ("Redirection:\n" + this.request.redirection);
+                 this.request.redirection = null;
+             } else if(this.request.result != null) {
+                 Debug.Log ("Answer:\n" + this.request.result);
+                 this.request.result = null;
+             }        
+         }
+     }
+ 
+     public class SampleAuthentificationRequest
+     {
+         public string result;
+         public string redirection = null;
+         public bool connected = false;
+         string host;
+         string authorizationQuery;
+         public SampleAuthentificationRequest(string host, string authorizationQuery){
+             this.host = host;
+             this.authorizationQuery = authorizationQuery;
+             
+         }
+ 
+         public static bool CertificateValidationCallback(
+             object sender,
+             X509Certificate certificate,
+             X509Chain chain,
+             SslPolicyErrors sslPolicyErrors)
+         {
+             Debug.Log ("[Warning] Using unsafe certification: always accepting server certificats !");
+             return true;
+         }
+ 
+         public IEnumerator Launch(string username, string password) {
+             string body = "username=" +  WWW.EscapeURL(username) + "&password=" +  WWW.EscapeURL(password) + "&login=1";
+             int contentLength = System.Text.Encoding.UTF8.GetBytes(body).Length;
+ 
+             TcpClient client = new TcpClient(this.host, 443);
+             NetworkStream networkStream = client.GetStream();
+             SslStream sslStream = new SslStream(networkStream
+                 ,false
+                 ,new RemoteCertificateValidationCallback(CertificateValidationCallback)
+             );
+             // Debug.Log("Authenticating...");
+             sslStream.AuthenticateAsClient (host);
+             // Debug.Log("Authent done");
+             while (!sslStream.IsAuthenticated) {
+                 // Debug.Log("Not yet authenticated...");
+                 yield return null;
+             }
+             this.connected = true;
+             StreamReader reader = new StreamReader(sslStream);
+             StreamWriter writer = new  StreamWriter(sslStream);
+ 
+             string requestData = "POST " + this.authorizationQuery + " HTTP/1.1\r\n";
+             requestData = requestData + "Host: " + this.host + "\r\n";
+             requestData = requestData + "User-Agent: UniNoco\r\n";
+             requestData = requestData + "Accept: */*\r\n";
+             requestData = requestData + "Content-Length: " + contentLength + "\r\n";
+             requestData = requestData + "Content-Type: application/x-www-form-urlencoded\r\n";
+             requestData = requestData + "\r\n";
+             requestData = requestData + body + "\r\n";
+             requestData = requestData + "\r\n";
+             requestData = requestData + "\r\n";
+             writer.Write (requestData);
+             writer.Flush ();
+             // Debug.Log ("Request:");
+             Debug.Log(requestData);
+             result = "";
+             string lastLine = null;
+             while (true) {
+                 if (!client.Connected) {
+                     // Debug.Log ("Disconnected");
+                     break;
+                 }
+ 
+                 if (sslStream.CanRead) {
+                     string line = reader.ReadLine ();
+                     if (line != null) {
+                         string redirectionHeader = "Location: ";
+                         if(line.StartsWith(redirectionHeader)){
+                             this.redirection = line.Substring (redirectionHeader.Length, line.Length - redirectionHeader.Length);
+                         }
+                         if (result != "") {
+                             result = result + "\n";
+                         }
+ 
+                         if (lastLine == "" && line == "0") {
+                             break;
+                         }
+                         lastLine = line;
+ 
+                         // Debug.Log ("Received: >" + line + "<");
+                         result = result + line;
+                     } else {
+                         break;
+                     }
+                 }
+                 // Debug.Log ("No data ...");
+                 yield return null;
+ 
+             }
+ 
+             // Debug.Log("Closing...");
+             sslStream.Close();
+             client.Close();
+             // Debug.Log("Closed.");
+             this.connected = false;
+             yield return null;
+         }
+     }
+ }

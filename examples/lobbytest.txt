@@ -1,0 +1,45 @@
+f you want to test your API before using it in a client application, you can invoke your REST services straight from a browser address bar. 
+For example, you could try:
+
+http://localhost:3000/lobby
+You will only be able to test your GET services that way. A more versatile solution to test RESTful services is to use cURL, 
+a command line utility for transferring data with URL syntax.
+
+For example, using cURL, you can test the Wine Cellar API with the following commands:
+
+Get all rooms:
+curl -i -X GET --insecure --user apiToken:4444 http://localhost:3000/lobby 
+
+
+Add a new Lobby: TriggerHappy
+curl -i -X POST -k -H 'Content-Type: application/json' -d '{"name": "TriggerHappy",   "lobbyguid": "1$652535", "numallowed": "5", "countrycode":"CAN", "roomtype":"single", "gametype": "red",  "teams": "true", "items": "true" }' --user apiToken:0966749350c476c87f03b6e763d0e1bf http://localhost:3000/lobby/add
+curl -i -X POST -k -H 'Content-Type: application/json' -d '{"name": "BigYellowTaxi",  "lobbyguid": "653%$534", "numallowed": "5", "secret": "23456", "countrycode":"USA", "roomtype":"multiple", "gametype": "red", "teams": "true", "items": "true" }' --user apiToken:0966749350c476c87f03b6e763d0e1bf http://localhost:3000/lobby/add
+curl -i -X POST -k -H 'Content-Type: application/json' -d '{"name": "BigYellowTaxi",  "lobbyguid": "655$%534", "numallowed": "5", "secret": "23456", "countrycode":"USA", "roomtype":"multiple", "gametype": "red", "teams": "true", "items": "true" }' --user apiToken:0966749350c476c87f03b6e763d0e1bf http://localhost:3000/lobby/add
+
+join :
+curl -i -X POST -k --user apiToken:4444 http://localhost:3000/lobby/join/id/23/public
+
+leave:
+curl -i -X DELETE -k --user apiToken:4444 http://localhost:3000/lobby/leave/id/23/public
+
+Modify Room  with _id value of 23 from BigYellowTaxi to BigRedRoom:
+curl -i -X PUT -k -H 'Content-Type: application/json' -d '{"name": "BrightCrimsonRedRoom",  "numallowed": "3", "secret": "4321", "countrycode":"AUS", "roomtype":"Mixed", "gametype": "purple",  "teams": "true", "items": "true" }' --user apiToken:0966749350c476c87f03b6e763d0e1bf http://localhost:3000/lobby/update/id/69205976/23456
+
+
+Delete Rooms by name or by id:
+curl -i -X DELETE -k --user apiToken:4444 http://localhost:3000/lobby/delete/name/BigRedRoom/4321
+curl -i -X DELETE -k --user apiToken:4444 http://localhost:3000/lobby/delete/id/223/23456
+
+Data to be entered in postman
+
+{"name": "TeaRoomLobby", 
+ "lobbyguid": "6234$@#5533",
+ "numconnected": "3",
+ "mumallowed": "6",
+ "gametype": "dab123",  
+ "roomtype": "hybrid",
+ "countrycode": "NZ",
+ "teams": "true", 
+ "items": "true",
+ "secret": "126789"
+}

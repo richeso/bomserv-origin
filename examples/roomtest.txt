@@ -1,0 +1,59 @@
+f you want to test your API before using it in a client application, you can invoke your REST services straight from a browser address bar. 
+For example, you could try:
+
+http://localhost:3000/rooms
+You will only be able to test your GET services that way. A more versatile solution to test RESTful services is to use cURL, 
+a command line utility for transferring data with URL syntax.
+
+For example, using cURL, you can test the Wine Cellar API with the following commands:
+
+Get all rooms:
+curl -i -X GET --insecure --user richard.cheso@gmail.com:password http://localhost:3000/rooms 
+
+Get pokemon with _id value of pikachu (use a value that exists in your database):
+curl -i -X GET -k --user richard.cheso@gmail.com:password http://localhost:3000/rooms/id/BlueRoom 
+
+Add a new Room: TriggerHappy
+curl -i -X POST -k -H "Content-Type: application/json" -d "{'roomname': 'TriggerHappy', 'secret': '126789', 'defaultmap': 'CityScape', 'roomtype': 'red', 'roomnumber': '20', 'teams': 'true', 'items': 'true', players': [{'playername': 'Julie', 'publicip': '1.2.3.4', 'publicport': '93', 'privateip': '4.5.6.7', 'privateport': '203'}, {'playername': 'Andy', 'publicip': '43.24.85.42', 'publicport': '93', 'privateip': '4.5.6.7', 'privateport': '203'}] }" --user richard.cheso@gmail.com:password http://localhost:3000/rooms/add
+curl -i -X POST -k -H "Content-Type: application/json" -d "{'roomname': 'BigComfyCouch', 'secret': '23445', 'defaultmap': 'CityScape', 'roomtype': 'red', 'roomnumber': '210', 'teams': 'true', 'items': 'true', players': [{'playername': 'Julie', 'publicip': '1.2.3.4', 'publicport': '93', 'privateip': '4.5.6.7', 'privateport': '203'}, {'playername': 'Andy', 'publicip': '43.24.85.42', 'publicport': '93', 'privateip': '4.5.6.7', 'privateport': '203'}] }" --user richard.cheso@gmail.com:password http://localhost:3000/rooms/add
+
+Modify Room  with _id value of HellCity:
+curl -i -X PUT -k -H 'Content-Type: application/json' -d '{"roomname": "TriggerHappy", "secret": "126789", "defaultmap": "CityScape", "players": [{"playername": "Julie", "publicip": "1.2.3.4", "privateip": "4.5.6.7"}, {"playername": "Andy", "publicip": "43.24.85.42", "privateip": "91.25.63.74"}] }' --user richard.cheso@gmail.com:password http://localhost:3000/rooms/update/TriggerHappy
+curl -i -X PUT -k -H 'Content-Type: application/json' -d '{"roomname": "TriggerSad", "secret": "2334" }' --user richard.cheso@gmail.com:password http://localhost:3000/rooms/update/TriggerHappy
+
+
+Delete Room with _id value of TriggerHappy:
+curl -i -X DELETE -k --user richard.cheso@gmail.com:password http://localhost:3000/rooms/delete/TriggerHappy
+
+
+Add Player :
+curl -i -X POST -k -H 'Content-Type: application/json' -d '{"playername": "Derek", "publicip": "42.22.3.4", "publicport": "34", "privateip": "41.53.65.76", "privateport": "300"}' --user richard.cheso@gmail.com:password http://localhost:3000/player/add/TriggerHappy
+curl -i -X POST -k -H 'Content-Type: application/json' -d '{"playername": "Chris", "publicip": "42.22.3.4", "publicport": "34", "privateip": "41.53.65.76", "privateport": "300"}' --user richard.cheso@gmail.com:password http://localhost:3000/player/add/TriggerHappy
+
+
+Delete Player :
+curl -i -X DELETE -k --user richard.cheso@gmail.com:password http://localhost:3000/player/delete/TriggerHappy/Chris
+
+Data to be entered in postman
+
+{"roomname": "TriggerHappy", 
+ "secret": "126789", 
+ "defaultmap": "CityScape", 
+ "roomtype": "red", 
+ "roomnumber": "20", 
+ "teams": "true", 
+ "items": "true", 
+ "players": [
+   {
+     "playername": "Julie", 
+     "publicip": "1.2.3.4", 
+     "publicport": "93", 
+     "privateip": "4.5.6.7", 
+     "privateport": "203"}, 
+   {
+     "playername": "Andy", 
+     "publicip": "43.24.85.42", 
+     "publicport": "93", 
+     "privateip": "4.5.6.7", 
+     "privateport": "203"}] 
+}

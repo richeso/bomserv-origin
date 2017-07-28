@@ -7,7 +7,10 @@ const userSchema = new mongoose.Schema({
   password: String,
   passwordResetToken: String,
   passwordResetExpires: Date,
-
+  activated: String,
+  activationToken: String,
+  apiToken: { type: String, unique: true },
+  activationExpires: Date,
   facebook: String,
   twitter: String,
   google: String,
@@ -68,3 +71,4 @@ userSchema.methods.gravatar = function gravatar(size) {
 const User = mongoose.model('User', userSchema);
 
 module.exports = User;
+

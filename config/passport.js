@@ -3,6 +3,7 @@ const passport = require('passport');
 const request = require('request');
 const InstagramStrategy = require('passport-instagram').Strategy;
 const LocalStrategy = require('passport-local').Strategy;
+const basicAuthStrategy = require('passport-http').BasicStrategy;
 const FacebookStrategy = require('passport-facebook').Strategy;
 const TwitterStrategy = require('passport-twitter').Strategy;
 const GitHubStrategy = require('passport-github').Strategy;
@@ -11,6 +12,7 @@ const LinkedInStrategy = require('passport-linkedin-oauth2').Strategy;
 const OpenIDStrategy = require('passport-openid').Strategy;
 const OAuthStrategy = require('passport-oauth').OAuthStrategy;
 const OAuth2Strategy = require('passport-oauth').OAuth2Strategy;
+const crypto = require("crypto");
 
 const User = require('../models/User');
 
@@ -43,6 +45,45 @@ passport.use(new LocalStrategy({ usernameField: 'email' }, (email, password, don
   });
 }));
 
+// Configure the Basic strategy for use by Passport.
+//
+// The Basic strategy requires a `verify` function which receives the
+// credentials (`username` and `password`) contained in the request.  The
+// function must verify that the password is correct and then invoke `cb` with
+// a user object, which will be set at `req.user` in route handlers after
+// authentication.
+passport.use(new basicAuthStrategy(
+  function(email, password, done) {
+	  console.log("===> in basic auth --> email="+email+" password="+password);
+	  if (email.toLowerCase() == "apitoken")  {
+		  User.findOne({ apiToken: password }, (err, user) => {
+			    if (err) { return done(err); }
+			    if (!user) {
+			      return done(null, false, { msg: `apiToken ${password} not found.` });
+			    }
+			    else 
+			    	return done(null, user);
+			  });
+		  
+	  } else {
+		  User.findOne({ email: email.toLowerCase() }, (err, user) => {
+			    if (err) { return done(err); }
+			    if (!user) {
+			      return done(null, false, { msg: `Email ${email} not found.` });
+			    }
+			    if (user.activated != 'Y' && !user.google && !user.facebook && !user.steam) {
+			       return done(null, false, { msg: 'Account not activated.' });
+			    }
+			    user.comparePassword(password, (err, isMatch) => {
+			      if (err) { return done(err); }
+			      if (isMatch) {
+			        return done(null, user);
+			      }
+			      return done(null, false, { msg: 'Invalid email or password.' });
+			    });
+			  });
+	  }
+  }));
 /**
  * OAuth Strategy Overview
  *
@@ -68,10 +109,12 @@ passport.use(new FacebookStrategy({
   profileFields: ['name', 'email', 'link', 'locale', 'timezone'],
   passReqToCallback: true
 }, (req, accessToken, refreshToken, profile, done) => {
+  var apiToken = req.session.apiToken;
   if (req.user) {
     User.findOne({ facebook: profile.id }, (err, existingUser) => {
       if (err) { return done(err); }
-      if (existingUser) {
+      //if (existingUser) {
+      if (existingUser && existingUser.email != req.user.email) {
         req.flash('errors', { msg: 'There is already a Facebook account that belongs to you. Sign in with that account or delete it, then link it with your current account.' });
         done(err);
       } else {
@@ -82,6 +125,12 @@ passport.use(new FacebookStrategy({
           user.profile.name = user.profile.name || `${profile.name.givenName} ${profile.name.familyName}`;
           user.profile.gender = user.profile.gender || profile._json.gender;
           user.profile.picture = user.profile.picture || `https://graph.facebook.com/${profile.id}/picture?type=large`;
+          if (apiToken) {
+          	user.apiToken=apiToken;
+          } else {
+          	if (!user.apiToken)
+          		user.apiToken = crypto.randomBytes(16).toString("hex");
+          } 
           user.save((err) => {
             req.flash('info', { msg: 'Facebook account has been linked.' });
             done(err, user);
@@ -93,6 +142,14 @@ passport.use(new FacebookStrategy({
     User.findOne({ facebook: profile.id }, (err, existingUser) => {
       if (err) { return done(err); }
       if (existingUser) {
+    	// Existing user found - we are authenticated
+      	// check whether request contains the state, if so, save the state
+      	if (apiToken) {
+      		existingUser.apiToken=apiToken;
+      		existingUser.save((err) => {  
+      	         return done(err, existingUser);
+      	     });
+      	}
         return done(null, existingUser);
       }
       User.findOne({ email: profile._json.email }, (err, existingEmailUser) => {
@@ -109,6 +166,12 @@ passport.use(new FacebookStrategy({
           user.profile.gender = profile._json.gender;
           user.profile.picture = `https://graph.facebook.com/${profile.id}/picture?type=large`;
           user.profile.location = (profile._json.location) ? profile._json.location.name : '';
+          if (apiToken) {
+            	user.apiToken=apiToken;
+          } else {
+            	if (!user.apiToken)
+            		user.apiToken = crypto.randomBytes(16).toString("hex");
+          } 
           user.save((err) => {
             done(err, user);
           });
@@ -239,48 +302,84 @@ passport.use(new GoogleStrategy({
   callbackURL: '/auth/google/callback',
   passReqToCallback: true
 }, (req, accessToken, refreshToken, profile, done) => {
+  var apiToken = req.session.apiToken;
   if (req.user) {
+	// User exists in request and already logged in i.e. this is a linking request to a google account
+	// check if there is already a profile
+	// that exists for the google user profile.id
+	// if so, ask user to sign in using that account
+	var requser=JSON.stringify(req.user);
+	console.log("Step#1 --> req.user="+requser+" apiToken="+apiToken+ " req.url"+req.url);
     User.findOne({ google: profile.id }, (err, existingUser) => {
       if (err) { return done(err); }
-      if (existingUser) {
+      if (existingUser && existingUser.email != req.user.email) {
         req.flash('errors', { msg: 'There is already a Google account that belongs to you. Sign in with that account or delete it, then link it with your current account.' });
-        done(err);
+        return done(err);
       } else {
         User.findById(req.user.id, (err, user) => {
           if (err) { return done(err); }
+          //console.log("Call#1 --> findById: email="+profile.emails[0].value+" accessToken="+accessToken+" refreshToken="+refreshToken);
+          var email = profile.emails[0].value;
+          user.email = email;
           user.google = profile.id;
           user.tokens.push({ kind: 'google', accessToken });
           user.profile.name = user.profile.name || profile.displayName;
           user.profile.gender = user.profile.gender || profile._json.gender;
           user.profile.picture = user.profile.picture || profile._json.image.url;
+          if (apiToken) {
+        	user.apiToken=apiToken;
+          } else {
+        	if (!user.apiToken)
+        		user.apiToken = crypto.randomBytes(16).toString("hex");
+          } 
           user.save((err) => {
-            req.flash('info', { msg: 'Google account has been linked.' });
-            done(err, user);
+            req.flash('info', { msg: 'Google account linked with Bomsy Updated' });
+            return done(err, user);
           });
         });
       }
     });
   } else {
+	// User not yet logged in - retrieve google profile and check if it exists.
+	console.log("Step#2 --> profile.id="+profile.id+" apiToken "+apiToken+ " req.url"+req.url);
     User.findOne({ google: profile.id }, (err, existingUser) => {
       if (err) { return done(err); }
       if (existingUser) {
+    	// Existing user found - we are authenticated
+    	// check whether request contains the state, if so, save the state
+    	if (apiToken) {
+    		existingUser.apiToken=apiToken;
+    		existingUser.save((err) => {  
+    	         return done(err, existingUser);
+    	     });
+    	}
         return done(null, existingUser);
       }
+      // otherwise check if email exists. if yes, reject the login
       User.findOne({ email: profile.emails[0].value }, (err, existingEmailUser) => {
         if (err) { return done(err); }
         if (existingEmailUser) {
           req.flash('errors', { msg: 'There is already an account using this email address. Sign in to that account and link it with Google manually from Account Settings.' });
-          done(err);
+          return done(err);
         } else {
+          // email does not exist - this is a new google user - save new user to database
+          //console.log("Call#2 --> findById: email="+profile.emails[0].value+" accessToken="+accessToken+" refreshToken="+refreshToken);
           const user = new User();
-          user.email = profile.emails[0].value;
+          var email = profile.emails[0].value;
+          user.email = email;
+          if (apiToken) {
+      		user.apiToken=apiToken;
+      	  } else {
+      		  user.apiToken = crypto.randomBytes(16).toString("hex");
+      	  } 
+          
           user.google = profile.id;
-          user.tokens.push({ kind: 'google', accessToken });
+          user.tokens.push({ kind: 'google', accessToken});
           user.profile.name = profile.displayName;
           user.profile.gender = profile._json.gender;
           user.profile.picture = profile._json.image.url;
           user.save((err) => {
-            done(err, user);
+            return done(err, user);
           });
         }
       });
@@ -456,30 +555,45 @@ passport.use(new OpenIDStrategy({
   providerURL: 'http://steamcommunity.com/openid',
   returnURL: 'http://localhost:3000/auth/steam/callback',
   realm: 'http://localhost:3000/',
-  stateless: true
-}, (identifier, done) => {
+  stateless: true,
+  passReqToCallback: true
+}, (req, identifier, done) => {
   const steamId = identifier.match(/\d+$/)[0];
   const profileURL = `http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${process.env.STEAM_KEY}&steamids=${steamId}`;
-
+  var apiToken = req.session.apiToken;
+  console.log("steam apiToken="+apiToken);
   User.findOne({ steam: steamId }, (err, existingUser) => {
+	
     if (err) { return done(err); }
-    if (existingUser) return done(err, existingUser);
+    if (existingUser) {
+    	console.log("Existing steam user: "+steamId);
+    	if (apiToken) {
+    		existingUser.apiToken = apiToken;
+	    	existingUser.save((err) => {
+	            return done(err, existingUser);
+	          });
+    	}
+    	return done(err, existingUser);
+    }
     request(profileURL, (error, response, body) => {
       if (!error && response.statusCode === 200) {
+    	console.log("New steam user: "+steamId);
         const data = JSON.parse(body);
         const profile = data.response.players[0];
-
         const user = new User();
         user.steam = steamId;
+        if (!apiToken) 	
+          apiToken = crypto.randomBytes(16).toString("hex");
+        user.apiToken = apiToken;
         user.email = `${steamId}@steam.com`; // steam does not disclose emails, prevent duplicate keys
         user.tokens.push({ kind: 'steam', accessToken: steamId });
         user.profile.name = profile.personaname;
         user.profile.picture = profile.avatarmedium;
         user.save((err) => {
-          done(err, user);
+           return done(err, user);
         });
       } else {
-        done(error, null);
+         return done(error, null);
       }
     });
   });

@@ -9,7 +9,7 @@ block content
     .form-group
       label.col-sm-3.control-label(for='email') Email
       .col-sm-7
-        input.form-control(type='email', name='email', id='email', value=user.email)
+        input.form-control(type='email', name='email', id='email', value=user.email, readonly=user.steam || user.instagram || user.google || user.facebook || user.twitter || user.github || user.linkedin)
     .form-group
       label.col-sm-3.control-label(for='name') Name
       .col-sm-7
@@ -80,6 +80,10 @@ block content
   .form-horizontal
     .form-group
       .col-sm-offset-3.col-sm-4
+        if user.steam
+          p: a.text-danger(href='/account/unlink/steam') Unlink your Steam account
+        else
+          p: a(href='/auth/steam') Link your Steam account
         if user.instagram
           p: a.text-danger(href='/account/unlink/instagram') Unlink your Instagram account
         else

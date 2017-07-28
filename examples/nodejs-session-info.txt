@@ -1,0 +1,52 @@
+----------------------------------------------------------------------------
+This is a dump of the NodeJS req.session and req.user after successful login
+using local login or google authentication api
+----------------------------------------------------------------------------
+Setup google callback api secret and token here: 
+https://console.developers.google.com/apis/credentials?project=testsite-170514
+
+Postman: 
+---------
+Auth URL: https://accounts.google.com/o/oauth2/v2/auth
+Access Token URL: https://www.googleapis.com/oauth2/v4/token
+GOOGLE_ID=98219747318-vo1ihksa8qcph5nntj93c2p78ln5gnp9.apps.googleusercontent.com
+GOOGLE_SECRET=pQxxjIiQ9CAVvP1iZmS7E94v
+
+Documentation: https://developers.google.com/identity/sign-in/web/backend-auth
+
+---------------------------------------
+Login via Google Authentication API
+---------------------------------------
+request.session={"cookie":{"originalMaxAge":21600000,"expires":"2017-06-13T00:27:58.778Z","httpOnly":true,"path":"/"},
+"_csrfSecret":"dKnHo569WX71Aw==","returnTo":"/account","flash":{},
+"passport":{"user":"593ecb815106f485dc5eb195"}}
+
+
+request.user={ _id: 593ecb815106f485dc5eb195,
+  updatedAt: 2017-06-12T17:12:33.481Z,
+  createdAt: 2017-06-12T17:12:33.481Z,
+  google: '118264620393568685946',
+  email: 'richcheso@gmail.com',
+  __v: 0,
+  profile: 
+   { picture: 'https://lh3.googleusercontent.com/-XdUIqdMkCWA/AAAAAAAAAAI/AAAAAAAAAAA/4252rscbv5M/photo.jpg?sz=50',
+     gender: 'other',
+     name: 'Che So' },
+  tokens: 
+   [ { kind: 'google',
+       accessToken: 'ya29.GltnBNzVgmrVTQjhd8M6yuodNOEYi1Z2qKdofn6zsCX5CCO6qeP80f3T9TBQNXGED4W1L97NIH07_INZVdnabusCxx0kxMtNMtziZe6Ir1pzQeT0_bY5BX4H3z_A' } ] }
+[0mGET /account [32m200 [0m720.495 ms - -[0m
+
+-------------------------------------
+Login via Local Email and Password
+-------------------------------------
+request.session={"cookie":{"originalMaxAge":21600000,"expires":"2017-06-13T00:30:53.779Z","httpOnly":true,"path":"/"},
+"_csrfSecret":"dKnHo569WX71Aw==","returnTo":"/account","flash":{},"passport":{"user":"592836ce8e924f48588ee9c6"}}
+request.user={ _id: 592836ce8e924f48588ee9c6,
+  updatedAt: 2017-05-26T14:09:03.960Z,
+  createdAt: 2017-05-26T14:08:14.920Z,
+  activated: 'Y',
+  email: 'richard.cheso@gmail.com',
+  password: '$2a$10$f7mUwfp60Ec.MjAAaqpu1uAlVAl6LrsXBm8rUSySS7J5d/a2sc336',
+  __v: 0,
+  tokens: [] }

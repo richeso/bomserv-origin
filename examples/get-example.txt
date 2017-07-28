@@ -1,0 +1,115 @@
+ using System.Collections;
+ using System.Collections.Generic;
+ using UnityEngine;
+ using System.Net.Sockets;
+ using System.IO;
+ 
+ public class TCPTest : MonoBehaviour {
+     public string redirection = null;
+     public string result = null;
+     public bool connected = false;
+ 
+     // Use this for initialization
+     void Start () {
+         fetchGetHttpRedirection ();
+     }
+     
+     // Update is called once per frame
+     void Update () {
+         if (!this.connected) {
+             if (this.redirection != null) {
+                 Debug.Log ("Redirection:\n" + this.redirection);
+                 this.redirection = null;
+             } else if(this.result != null) {
+                 Debug.Log ("Answer:\n" + this.result);
+                 this.result = null;
+             }        
+         }
+     }
+ 
+     void fetchGetHttpRedirection(){
+         StartCoroutine (GetTCPClientRedirect ("example.com","/"));
+ 
+     }
+ 
+     IEnumerator GetTCPClientRedirect(string host, string query){        
+         TcpClient client = new TcpClient(host, 80);
+         NetworkStream networkStream = client.GetStream();
+         StreamReader reader = new StreamReader(networkStream);
+         StreamWriter writer = new  StreamWriter(networkStream);
+         // Basic GET request: 
+         // GET /foo.html HTTP/1.1\r\nHost: example.com\r\n
+         writer.WriteLine("GET "+ query + " HTTP/1.1");
+         writer.WriteLine("Host: " + host);
+         writer.WriteLine("");
+         writer.Flush ();
+         this.redirection = null; // variable where we'll store the redirection
+         string lastLine = null;
+         this.result = "";
+         this.connected = true;
+         while (true) {
+             if (!client.Connected) {
+                 break;
+             }
+ 
+             if (networkStream.CanRead) {
+                 string line = reader.ReadLine ();
+                 if (line != null) {
+                     string redirectionHeader = "Location: ";
+                     if(line.StartsWith(redirectionHeader)){
+                         this.redirection = line.Substring (redirectionHeader.Length, line.Length - redirectionHeader.Length);
+                     }
+                     if (this.result != "") {
+                         this.result = this. result + "\n";
+                     }
+ 
+                     if (lastLine == "" && line == "0") {
+                         break;
+                     } else {
+                         lastLine = line;
+                         this.result = this.result + line;
+                     }
+                 } else {
+                     break;
+                 }
+             }
+             // To avoid blocking the thread
+             yield return null;
+         }
+         // Disconnection
+         networkStream.Close();
+         client.Close();
+         this.connected = false;
+         yield return null;
+     }
+ 
+ }
+ 
+1. Login to get Authorization Code (Note need to paste this in a browser to authenticate to google
+--------------------------------------------------------------------------------------------------
+
+https://accounts.google.com/o/oauth2/v2/auth?response_type=code&redirect_uri=http://localhost:3000/auth/google/callback&scope=profile+email&client_id=98219747318-vo1ihksa8qcph5nntj93c2p78ln5gnp9.apps.googleusercontent.com&state=912345678
+
+https://accounts.google.com/o/oauth2/auth?client_id=98219747318-hb93lckb6oq6e3uqk06aflf9ia3505km.apps.googleusercontent.com&response_type=code&scope=email+profile&redirect_uri=urn:ietf:wg:oauth:2.0:oob
+
+2. Use Authorization code from above and enter into code=xxx - to get access token and refresh token
+--------------------------------------------------------------------------------------------------
+curl --request POST --data "code=4/xst96k4mLCMshJWlu9ntW129_AZfBCAcdEst92uxhZA&client_id=98219747318-hb93lckb6oq6e3uqk06aflf9ia3505km.apps.googleusercontent.com&client_secret=WIqcA2LTN41dsZpH0IAVWqX3&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code" https://accounts.google.com/o/oauth2/token
+
+3. If Expired - Exchange for a new access token using refresh token
+-------------------------------------------------------------------
+curl --request POST --data 'client_id=98219747318-hb93lckb6oq6e3uqk06aflf9ia3505km.apps.googleusercontent.com&client_secret=WIqcA2LTN41dsZpH0IAVWqX3&refresh_token=1/s5DFC005cJbIDi7dvPCtajngD5MOKN5ckU6ZvruIU5o&grant_type=refresh_token' \
+https://accounts.google.com/o/oauth2/token
+
+# Exchange Authorization code for an access token and a refresh token.
+
+curl \
+--request POST \
+--data "code=[Authentcation code from authorization link]&client_id=[Application Client Id]&client_secret=[Application Client Secret]&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code" \
+https://accounts.google.com/o/oauth2/token
+
+# Exchange a refresh token for a new access token.
+curl \
+--request POST \
+--data 'client_id=98219747318-hb93lckb6oq6e3uqk06aflf9ia3505km.apps.googleusercontent.com&client_secret=WIqcA2LTN41dsZpH0IAVWqX3&refresh_token=1/s5DFC005cJbIDi7dvPCtajngD5MOKN5ckU6ZvruIU5o&grant_type=refresh_token' \
+https://accounts.google.com/o/oauth2/token

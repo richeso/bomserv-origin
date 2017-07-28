@@ -1,0 +1,15 @@
+extends ../layout
+
+block content
+  .col-sm-8.col-sm-offset-2
+    form(method='POST')
+      legend  #{__("Resend Activation Email")}
+      input(type='hidden', name='_csrf', value=_csrf)
+      .form-group
+        p #{__("Resend-Email-Instructions")}
+        label.control-label(for='email') #{__("Email")}
+        input.form-control(type='email', name='email', id='email', placeholder='Email', autofocus, required)
+      .form-group
+        button.btn.btn-primary(type='submit')
+          i.fa.fa-key
+          |  #{__("Resend Activation Email")}
