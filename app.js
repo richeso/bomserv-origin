@@ -62,7 +62,8 @@ app.use(express.static(path.join(__dirname, 'public'), { maxAge: 31557600000 }))
  */
 mongoose.Promise = global.Promise;
 mongoose.connect(process.env.MONGODB_URI || process.env.MONGOLAB_URI);
-mongoose.connection.on('error', () => {
+mongoose.connection.on('error', (err) => {
+  console.error(err);
   console.log('%s MongoDB connection error. Please make sure MongoDB is running.', chalk.red('✗'));
   process.exit();
 });
@@ -92,9 +93,10 @@ app.use(session({
 	  },
   store: new MongoStore({
     url: process.env.MONGODB_URI || process.env.MONGOLAB_URI,
-    autoReconnect: true,
+    autoReconnect: true, 
+    clear_interval: 3600,
     autoRemove: 'interval',
-    autoRemoveInterval: 10*60*1000 // 10 Minutes 
+    autoRemoveInterval: 10*60*1000
   })
 }));
 //init i18n after cookie-parser
@@ -214,7 +216,7 @@ app.get('/auth/instagram', passport.authenticate('instagram'));
 app.get('/auth/instagram/callback', passport.authenticate('instagram', { failureRedirect: '/login' }), (req, res) => {
   res.redirect(req.session.returnTo || '/');
 });
-//app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email', 'user_location'] }));
+//app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email', 'public_profile'] }));
 app.get("/auth/facebook", function(req, res)
 		{
 	        var apiToken = req.param('state');

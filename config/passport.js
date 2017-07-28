@@ -1,4 +1,3 @@
-const _ = require('lodash');
 const passport = require('passport');
 const request = require('request');
 const InstagramStrategy = require('passport-instagram').Strategy;
@@ -106,7 +105,7 @@ passport.use(new FacebookStrategy({
   clientID: process.env.FACEBOOK_ID,
   clientSecret: process.env.FACEBOOK_SECRET,
   callbackURL: '/auth/facebook/callback',
-  profileFields: ['name', 'email', 'link', 'locale', 'timezone'],
+  profileFields: ['name', 'email', 'link', 'locale', 'timezone', 'gender'],
   passReqToCallback: true
 }, (req, accessToken, refreshToken, profile, done) => {
   var apiToken = req.session.apiToken;
@@ -636,8 +635,8 @@ exports.isAuthenticated = (req, res, next) => {
  */
 exports.isAuthorized = (req, res, next) => {
   const provider = req.path.split('/').slice(-1)[0];
-
-  if (_.find(req.user.tokens, { kind: provider })) {
+  const token = req.user.tokens.find(token => token.kind === provider);
+  if (token) {
     next();
   } else {
     res.redirect(`/auth/${provider}`);
