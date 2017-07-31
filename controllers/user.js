@@ -1,40 +1,31 @@
 const bluebird = require('bluebird');
-const async = require('async');
 const crypto = bluebird.promisifyAll(require('crypto'));
 const nodemailer = require('nodemailer');
 const passport = require('passport');
 const User = require('../models/User');
+const sgTransport = require('nodemailer-sendgrid-transport');
+const sgOptions = {
+		auth: {
+		    api_key:  process.env.SENDGRID_PASSWORD
+		}
+};
 
-var emailActivationRequest = function(req,res,token,user) {
-  const mailOptions = {
-          to: user.email,
-          from: res.__("Activation-email-from"),
-          subject: res.__("Activation-email-subject"),
-          text: res.__("Activation-email-text")+`\nhttps://${req.headers.host}/activate/${token}\n\n`
-        };
-       
-        var helper = require('sendgrid').mail;
-        var from_email = new helper.Email(mailOptions.from);
-        var to_email = new helper.Email(mailOptions.to);
-        
-        var content = new helper.Content('text/plain', mailOptions.text);
-        var mail = new helper.Mail(from_email, mailOptions.subject, to_email, content);
-
-        var sg = require('sendgrid')(process.env.SENDGRID_PASSWORD);
-        var request = sg.emptyRequest({
-          method: 'POST',
-          path: '/v3/mail/send',
-          body: mail.toJSON(),
-        });
-
-        sg.API(request, function(error, response) {
-          //console.log(response.statusCode);
-         // console.log(response.body);
-         // console.log(response.headers);
-          req.flash('success', { msg: res.__("Activation-email-sent") });
-          res.redirect('/actmail');
-        });
-}
+var emailActivation = function(user,req,res,token) {
+	
+    const transporter = nodemailer.createTransport(sgTransport(sgOptions));
+    
+    const mailOptions = {
+            to: user.email,
+            from: res.__("Activation-email-from"),
+            subject: res.__("Activation-email-subject"),
+            text: res.__("Activation-email-text")+`\nhttps://${req.headers.host}/activate/${token}\n\n`
+    };
+         
+    return transporter.sendMail(mailOptions)
+      .then(() => {
+    	  req.flash('success', { msg: res.__("Activation-email-sent") });
+    });
+};
 /**
  * GET /login
  * Login page.
@@ -123,12 +114,6 @@ exports.postSignup = (req, res, next) => {
     return res.redirect('/signup');
   }
 
-  const user = new User({
-    email: req.body.email,
-    password: req.body.password,
-    apiToken: crypto.randomBytes(16).toString("hex")
-  });
-
   
   User.findOne({ email: req.body.email }, (err, existingUser) => {
     if (err) { return next(err); }
@@ -136,41 +121,37 @@ exports.postSignup = (req, res, next) => {
       req.flash('errors', { msg: 'Account with that email address already exists.' });
       return res.redirect('/signup');
     }
-   
-    async.waterfall([
-      function createRandomToken(done) {
-        crypto.randomBytes(16, (err, buf) => {
-          const token = buf.toString('hex');
-          done(err, token);
-        });
-      },
-
-     function setRandomToken(token, done) {
-    	 user.activationToken = token;
-    	 user.activated = 'N';
-         user.activationExpires = Date.now() + (24*60*60*1000); // 24 hours
-         done(err, token, user);
-      },
-      
-      function saveNewAccount(token, user, done) {
-    	
-    	  user.save((err) => {
-    	      if (err) { return next(err); }
-    	    });
-
- 	     done(err, token, user);
-    	  
-      },
-       
-      function sendActivaionEmail(token, user, done) { 
-         emailActivationRequest(req,res,token,user);
-      }
-    ], (err) => {
-      if (err) { return next(err); }
-      res.redirect('/signup');
-    });
-    
   });
+  
+    var token = "";
+    
+    const createRandomToken =
+      crypto.randomBytesAsync(16)
+        .then( (buf) => {
+          token = buf.toString('hex');
+          return token;
+        }
+     );
+    
+    const createNewUser = ((token) => {
+		 user = new User({
+		    email: req.body.email,
+		    password: req.body.password,
+		    apiToken: crypto.randomBytes(16).toString("hex")
+		 });
+    	user.activationToken = token;
+	    user.activated = 'N';
+        user.activationExpires = Date.now() + (24*60*60*1000); // 24 hours
+        user.save();
+        return user;
+      });
+     
+    createRandomToken
+      .then(createNewUser)
+      .then((user) => emailActivation(user,req,res,token))
+      .then(() =>  res.redirect('/signup'))
+      .catch(next);
+    
 };
 
 /**
@@ -371,21 +352,16 @@ exports.postReset = (req, res, next) => {
   
   const sendResetPasswordEmail = (user) => {
     if (!user) { return; }
-    const sgTransport = require('nodemailer-sendgrid-transport');
-    var sgOptions = {
-    		  auth: {
-    		    api_key:  process.env.SENDGRID_PASSWORD
-    	}
-    }
 
     const transporter = nodemailer.createTransport(sgTransport(sgOptions));
-    
+  
     const mailOptions = {
       to: user.email,
       from: 'smq-site@bomsy.com',
       subject: 'Your Bomsy password has been changed',
       text: `Hello,\n\nThis is a confirmation that the password for your account ${user.email} has just been changed.\n`
     };
+    
     return transporter.sendMail(mailOptions)
       .then(() => {
         req.flash('success', { msg: 'Success! Your password has been changed.' });
@@ -431,6 +407,7 @@ exports.postForgot = (req, res, next) => {
   const createRandomToken = crypto
     .randomBytesAsync(16)
     .then(buf => buf.toString('hex'));
+  
   const setRandomToken = token =>
     User
       .findOne({ email: req.body.email })
@@ -447,14 +424,8 @@ exports.postForgot = (req, res, next) => {
 
   const sendForgotPasswordEmail = (user) => {
     if (!user) { return; }
+    
     const token = user.passwordResetToken;
-    const sgTransport = require('nodemailer-sendgrid-transport');
-    var sgOptions = {
-    		  auth: {
-    		    api_key:  process.env.SENDGRID_PASSWORD
-    	}
-    }
-
     const transporter = nodemailer.createTransport(sgTransport(sgOptions));
     
     const mailOptions = {
@@ -503,46 +474,45 @@ exports.postActmail = (req, res, next) => {
   req.assert('email', 'Please enter a valid email address.').isEmail();
   req.sanitize('email').normalizeEmail({ gmail_remove_dots: false });
 
-  const errors = req.validationErrors();
+  	 const errors = req.validationErrors();
 
-  if (errors) {
-    req.flash('errors', errors);
-    return res.redirect('/actmail');
-  }
-
-    async.waterfall([
-      function createRandomToken(done) {
-        crypto.randomBytes(16, (err, buf) => {
-          const token = buf.toString('hex');
-          done(err, token);
-        });
-      },
-      function setRandomToken(token, done) {
-    	  //console.log("Resending activation Email for: " + req.body.email);
-          User.findOne({ email: req.body.email }, (err, user) => {
-            if (err) { return done(err); }
-            if (!user) {
-              req.flash('errors', { msg: 'Account with that email address does not exist.' });
-              return res.redirect('/actmail');
-            }
-            if (user.activated == 'Y') {
-              req.flash('errors', { msg: 'Account already activated !' });
-              return res.redirect('/login');
-            }
-            user.activationToken = token;
-            user.activated = 'N';
-            user.activationExpires = Date.now() + (24*60*60*1000); // 24 hours
-            user.save((err) => {
-              done(err, token, user);
-            });
+	  if (errors) {
+	    req.flash('errors', errors);
+	    return res.redirect('/actmail');
+	  }
+      var token = "";
+      const createRandomToken =
+        crypto.randomBytesAsync(16)
+          .then( (buf) => {
+            token = buf.toString('hex');
+            return token;
+          }
+       );
+      
+      const setRandomToken = token =>
+    	  //console.log("Re-sending activation Email for: " + req.body.email);
+          User.findOne({ email: req.body.email })
+          .then ((user) => {
+        	  if (!user) {
+                  req.flash('errors', { msg: 'Account with that email address does not exist.' });
+                  return res.redirect('/actmail');
+              } else {
+            	  if (user.activated == 'Y') {
+                      req.flash('errors', { msg: 'Account already activated !' });
+                      return res.redirect('/login');
+                   }
+            	  user.activationToken = token;
+                  user.activated = 'N';
+                  user.activationExpires = Date.now() + (24*60*60*1000); // 24 hours
+                  user = user.save();
+              }
+        	  return user;
           });
-       },
-      function sendActivaionEmail(token, user, done) { 
-         emailActivationRequest(req,res,token,user);
-      }
-    ], (err) => {
-      if (err) { return next(err); }
-      res.redirect('/actmail');
-    });
+       
+      createRandomToken
+        .then(setRandomToken)
+        .then((user) => emailActivation(user,req,res,token))
+        .then(() => res.redirect('/actmail'))
+        .catch(next);
     
 };
