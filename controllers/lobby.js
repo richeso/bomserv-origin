@@ -24,12 +24,12 @@ var parseAuthHeader = function(req,res) {
 	var tmp = auth.split(' ');   // Split on a space, the original auth looks like  "Basic Y2hhcmxlczoxMjM0NQ==" and we need the 2nd part
 	var buf = new Buffer(tmp[1], 'base64'); // create a buffer and tell it the data coming in is base64
 	var plain_auth = buf.toString();        // read it back out as a string
-	console.log("Decoded Authorization ", plain_auth);
+	//console.log("Decoded Authorization ", plain_auth);
 	// At this point plain_auth = "username:password"
 	var creds = plain_auth.split(':');      // split on a ':'
 	var username = creds[0];
 	var password = creds[1];
-	console.log("username="+username+ " password="+password);
+	//console.log("username="+username+ " password="+password);
 	return [username, password];
 };
 
@@ -62,7 +62,7 @@ var generateUnique = function() {
 };
 
 var updateExpires = function (lobby) {
-	lobby.expires = Date.now() + (60*1000); // 60 seconds
+	lobby.expires = Date.now() + (60*60*1000); // 60 seconds
 	//lobby.expires = Date.now() + (2*60*60*1000); // 2 hours
 	lobby.lastupdated = Date.now();
 }
@@ -73,13 +73,21 @@ exports.testBasicAuth = (req, res, next) => {
 	password=creds[1];
 	if (email.toLowerCase() == "apitoken")  {
 		User.findOne({ apiToken: password }, (err, user) => {
-		    if (err) { return next("Error: " +err)};  
-	        res.send(user);
+		    if (err) { 
+    	    	res.send("{Error: "+err+"}");
+    	    }  
+		    else {
+		    	res.send("{Success: , User: '"+user+"}");
+		    }
 		});
 	} else {
 		User.findOne({ email: email }, (err, user) => {
-		    if (err) { return next("Error: " +err)};  
-	        res.send(user);
+			 if (err) { 
+	    	    	res.send("{Error: "+err+"}");
+	    	    }  
+			 else {
+			    res.send("{Success: , User: '"+user+"}");
+			 }
 		});
 	}
 	
@@ -91,7 +99,7 @@ exports.findAll = (req, res, next) => {
 	        console.log(docs);
 	        res.send(docs);
 	    } else {
-	    	res.send("Error: " +err);
+	    	res.send("{Error: "+err+"}");
 	    }
 	});
     
@@ -101,8 +109,17 @@ exports.findById = (req, res, next) => {
 	var lobbyid = req.params.id;
 	var passwd  = req.params.secret;
 	Lobby.findOne({ id: lobbyid, secret: passwd }, (err, lobby) => {
-	    if (err) { res.send("Error: " +err)};
-        res.send(lobby);
+	    if (err) {
+	    	res.send("{Error: "+err+"}");
+	    }
+	    else {
+	    	if (lobby)
+	    		res.send(lobby);
+	    	else {
+	    		res.send("{Error: 'Could not find Lobby with lobby id and secret "+lobbyid+"/"+passwd+"'}")
+	    	}
+	    		
+	    }
 	});
    
 };
@@ -111,7 +128,7 @@ exports.addLobby = (req, res, next) => {
 	var data = req.body;
     var datastr = JSON.stringify(data);
     var username = req.user.email;
-    console.log('Adding Lobby: ' + datastr);
+    //console.log('Adding Lobby: ' + datastr);
     const lobby = new Lobby({
         name: data.name,
         lobbyguid: data.lobbyguid,
@@ -138,7 +155,7 @@ exports.addLobby = (req, res, next) => {
     updateExpires(lobby);
     
     lobby.save((err) => {
-	      if (err) { return next("Error: "+err);  }
+	      if (err) { res.send("{Error: "+err+"}"); }
 	      else { res.send(lobby);}
 	} );
 };
@@ -149,29 +166,30 @@ exports.updateLobby = (req, res, next) => {
   	  var userid = req.user.email;
   	  var isValid = true;
 	  async.waterfall([
-	    function findLobby(done) { 
+	    function findLobby(next) { 
 	    	Lobby.findOne({ id: lobbyid }, (err, lobby) => {
 	    	    if (err) {
 	    	    	isValid = false;
-	    	    	res.send("Error: "+err);
+	    	    	res.send("{Error: "+err+"}");
 	    	    }
 	    	     
 	    	    if (lobby && lobby.secret != passwd) {
 	    	    	  isValid = false;
-	    	    	  err = "Error: Invalid secret: "+ passwd+ " doesn't match !";
+	    	    	  err = "{Error: 'Invalid secret', Reason: '"+ passwd+ " does not match'}";
 	    	    	  res.send (err);
 	    	    }
 	    	     
 	    	    if (lobby && lobby.username != userid) {
 	    	    	 isValid = false;
-	    	    	 err = "Error: Invalid username: "+userid+ " doesn't match !";
+	    	    	 err = "{Error: 'Invalid username', Reason: '"+userid+ " does not match'}";
 	    	    	 res.send (err);
 	    	    }
 	    	     
-	    	    done(err, lobby); 
+	    	    if (isValid)
+	    	    	next(err, lobby); 
 	    	});    	
 	    },
-	    function updateit(lobby, done) {
+	    function updateit(lobby, next) {
 		    if (lobby && isValid) {
 		        var data = req.body;
                 var datastr = JSON.stringify(data);
@@ -188,17 +206,18 @@ exports.updateLobby = (req, res, next) => {
 			    if (data.numallowed) lobby.numallowed=data.numallowed;
 			    updateExpires(lobby);
 		    	lobby.save((err) => {
-		      		if (err) { return next(err);  }
-		      		else { res.send("Updated Lobby: "  + lobby);}
+		      		if (err) { res.send("{Error: "+err+"}");  }
+		      		else { res.send("{Success: 'Updated Lobby', LobbyData:"  + lobby+"}");}
 				});
 		    	
 		    } else {
-		       res.send ("Error: Invalid id not found: "+lobbyid);
+		       res.send ("{Error: 'Lobby id not found', Lobbyid: '"+lobbyid+"'}");
 		    }
 	    }
 	  ], (err) => {
-	    if (err) { return next(err); }
-	    res.send("Updated:"+lobby);
+	    if (err) { res.send("{Error: "+err+"}"); }
+	    else 
+	    	res.send("{Success:' Updated Lobby', Data: '"+lobby+"}");
 	  });
 };
 
@@ -207,43 +226,46 @@ exports.delete = (req, res, next) => {
 	  var passwd = req.params.secret;
   	  var userid = req.user.email;
 	  async.waterfall([
-	    function findLobby(done) {
+	    function findLobby(next) {
 	    	Lobby.findOne({ id: lobbyid , secret: passwd , username: userid}, (err, lobby) => {
-	    	    if (err) { res.send("Error: " +err) }
-	    	    done(err, lobby); 
+	    	    if (err) { res.send("{Error: "+err+"}"); }
+	    	    else {
+	    	    	next(err, lobby); 
+	    	    }
 	    	});
 	    },
-	    function deleteIt(lobby, done) {
+	    function deleteIt(lobby, next) {
 		    if (lobby) {
 		    	Lobby.remove({ _id: lobby._id }, (err) => {
-		    	    if (err) { return next("Error: "+err); }
+		    	    if (err) { res.send("{Error: "+err+"}"); }
 		    	    else {
-		    	       res.send("Deleted:"+lobbyid);
-		    	       }
+		    	       res.send("{Success: 'Deleted Lobby Id "+lobbyid+"'}");
+		    	     }
 		    	});
 		    	
 		    } else {
-		    	res.send("Error: Lobby not found or Wrong Password: "+lobbyid);
+		    	res.send("{Error: 'Lobby Id not found or Wrong Password "+lobbyid+"'}");
 		    }
 	    }
 	  ], (err) => {
-	    if (err) { return next(err); }
-	    res.send("Deleted:"+lobby);
+	    if (err) { res.send("{Error: "+err+"}"); }
+	    else 
+	    	res.send("{Success: 'Deleted Lobby id "+lobby+"'}");
 	  });
 };
 
 exports.join = (req, res, next) => {
       var lobbyid = req.params.id;
       var passwd = req.params.secret;
-      
+      //console.log("in lobbyController join: lobbyid="+lobbyid+ " secret="+passwd);
 	  async.waterfall([
-	    function findLobby(done) {
+	    function findLobby(next) {
 	    	Lobby.findOne({ id: lobbyid , secret: passwd }, (err, lobby) => {
-	    	    if (err) { res.send(err) }
-	    	    done(err, lobby); 
+	    	    if (err) {  res.send("{Error: "+err+"}"); }
+	    	    else next(err, lobby); 
 	    	});
 	    },
-	    function updateit(lobby, done) {
+	    function updateit(lobby, next) {
 		    if (lobby) {
 		        var tempnum = lobby.numconnected;
 		        if (tempnum < lobby.numallowed) {
@@ -251,33 +273,32 @@ exports.join = (req, res, next) => {
 		        }
 		        updateExpires(lobby);
 		    	lobby.save((err) => {
-		      		if (err) { return next(err);  }
-		      		else { res.send("Updated Lobby: "  + lobbyid);}
+		      		if (err) { res.send("{Error: "+err+"}"); }
+		      		else { res.send("{Success: 'Updated Lobby "  + lobbyid+"'}");}
 				});
 		    	
 		    } else {
 		        // Lobby was not found - cannot add Player
-		    	res.send("Error: Lobby not found: "+lobbyid);
+		    	res.send("{Error: 'Lobby Id not found or wrong secret "+lobbyid+"/"+passwd+"'}");
 		    }
 	    }
 	  ], (err) => {
-	    if (err) { return next(err); }
-	    res.send("Error: Lobby Join Problem:"+lobby);
+	    res.send("{Error: Lobby Join Problem:"+err+"'}");
 	  });
 };
 
 exports.leave = (req, res, next) => {
       var lobbyid = req.params.id;
       var passwd = req.params.secret;
-      console.log ("leaving lobby: "+lobbyid);
+      //console.log ("leaving lobby: "+lobbyid);
 	  async.waterfall([
-	    function findLobby(done) {
+	    function findLobby(next) {
 	    	Lobby.findOne({ id: lobbyid , secret: passwd}, (err, lobby) => {
-	    	    if (err) { res.send(err) }
-	    	    done(err, lobby); 
+	    	    if (err) {res.send("{Error: "+err+"}"); }
+	    	    else next(err, lobby); 
 	    	});
 	    },
-	    function updateit(lobby, done) {
+	    function updateit(lobby, next) {
 		    if (lobby) {
 		    	var tempnum = lobby.numconnected;
 		        if (lobby.numconnected > 1) {
@@ -285,17 +306,16 @@ exports.leave = (req, res, next) => {
 		        }
 		        updateExpires(lobby);
 		    	lobby.save((err) => {
-		      		if (err) { return next(err);  }
-		      		else { res.send("updated Lobby: "  + lobbyid);}
+		      		if (err) { res.send("{Error: "+err+"}"); }
+		      		else { res.send("{Success: 'Updated Lobby LobbyId "  + lobbyid+"'}");}
 				});
 		    	
 		    } else {
-		    	 // Lobby was not found - cannot Delete Player
-		    	res.send("Lobby was not found: "+lobbyid);
+		    	 // Lobby was not found - cannot Leave
+		    	res.send("{Error: 'Lobby Id not found or wrong secret "+lobbyid+"/"+passwd+"'}");
 		    }
 	    }
 	  ], (err) => {
-	    if (err) { return next(err); }
-	    res.send("Lobby Leave Error:"+lobby);
+	    res.send("{Error: 'Lobby Leave Error LobbyId "+lobbyid+" " + err+"'}");
 	  });
 };
